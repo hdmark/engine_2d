@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+nalgebra = "0.34.1"
+nalgebra-glm = "0.20.0"
 
 pix-engine = "0.8.0"
 
