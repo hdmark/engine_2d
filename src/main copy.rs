@@ -17,26 +17,20 @@ struct MyApp {
 impl MyApp {}
 pub struct CircleE2d {
     radius: f32,
+    // position: Vec2,
+    // // speed: f32,
+    // velocity: Vec2,
+    // inv_mass: f32,
+    // restitution: f32,
 }
 pub struct RectE2d {
     pub min: Vec2,
     pub max: Vec2,
-    pub length: f32,
-    pub width: f32,
 }
 pub enum Collider {
     CircleE2d(CircleE2d),
     RectE2d(RectE2d),
 }
-impl Collider {
-    fn as_circle(&self) -> &CircleE2d {
-        match self {
-            Collider::CircleE2d(c) => c,
-            _ => panic!("Expected CircleE2d"),
-        }
-    }
-}
-
 pub struct Body {
     pub position: Vec2,
     pub velocity: Vec2,
@@ -55,9 +49,9 @@ impl CircleE2d {
 }
 
 impl RectE2d {
-    pub fn new(min: Vec2, max: Vec2, length: f32, width: f32) -> Self {
+    pub fn new(min: Vec2, max: Vec2) -> Self {
         // RectE2d { half }
-        RectE2d { min, max, width, length }
+        todo!()
     }
 
     pub fn default() -> Self {
@@ -65,21 +59,6 @@ impl RectE2d {
     }
 }
 impl Body {
-    pub fn to_draw(&self) -> Vec<i32> {
-        match &self.collider {
-            Collider::CircleE2d(c) => {
-                vec![self.position.x as i32, self.position.y as i32, c.radius as i32]
-            }
-            Collider::RectE2d(r) => {
-                vec![
-                    self.position.x as i32,
-                    self.position.y as i32,
-                    r.length as i32,
-                    r.width as i32
-                ]
-            }
-        }
-    }
     // pub fn resolve_collision_with(&mut self, other: &mut Body) {
     //     use Collider::*;
     //     match (self.collider, other.collider) {
@@ -93,56 +72,15 @@ impl Body {
 // TODO - make manifold generation
 // TODO - make resolve collision functions, combine?
 // TODO - builder pattern?
-
-pub struct Manifold<'a> {
-    a: &'a Body,
-    b: &'a Body,
-    penetration: f32,
-    normal: Vec2,
-}
-pub fn CircleVsCircle(m: &mut Manifold) -> bool {
-    let ca = m.a;
-    let cb = m.b;
-    let sa = m.a.collider.as_circle();
-    let sb = m.b.collider.as_circle();
-
-    let n: Vec2 = ca.position - cb.position;
-    let mut r = sa.radius + sb.radius;
-    r *= r;
-    if n.magnitude_squared() > r {
-        return false;
-    }
-    let d = n.magnitude();
-
-    if d != 0.0 {
-        m.penetration = r - d;
-        m.normal = n.normalize();
-    } else {
-        m.penetration = sa.radius;
-        m.normal = Vec2::new(1.0, 0.0);
-    }
-
-    return true;
-}
 fn rc(a: &mut Body, b: &mut Body) {
-    let col: bool = match (&a.collider, &b.collider) {
-        (Collider::CircleE2d(i), Collider::CircleE2d(j)) => {
-            let mut r = i.radius + j.radius;
-            r *= r;
-            // dbg!(r, a.position.x, b.position.x, a.position.y, b.position.y);
-            // return r > (a - b).powf(2.0);
-
-            r > (a.position.x - b.position.x).powf(2.0) + (a.position.y - b.position.y).powf(2.0)
-        }
-        (Collider::CircleE2d(circle_e2d), Collider::RectE2d(rect_e2d)) => todo!(),
-        (Collider::RectE2d(rect_e2d), Collider::CircleE2d(circle_e2d)) => false,
-        (Collider::RectE2d(i), Collider::RectE2d(j)) => todo!(),
-    };
-    if !col {
-        return;
-    }
+    // let  a =  self.items[0];
+    // let  b = self.items[1];
     let rv = b.velocity - a.velocity;
     let mut n = b.position - a.position;
+    // let mut n =  Vec2::new(
+    //      self.items[1].position.x - self.items[0].position.x,
+    //      self.items[1].position.y - self.items[0].position.y,
+    // );
     n /= glm::length(&n);
 
     let vel_along_normal = rv.dot(&n);
@@ -158,10 +96,83 @@ fn rc(a: &mut Body, b: &mut Body) {
     let mut j: f32 = -(1.0 + e) * vel_along_normal;
     j /= b.inv_mass + a.inv_mass;
     let impulse = j * n;
+    // let impulse = VecE2d { x: j * n.x, y: j * n.y };
     dbg!(j, impulse.x, impulse.y, vel_along_normal);
     a.velocity -= a.inv_mass * impulse;
     b.velocity += b.inv_mass * impulse;
+    // self.objects[0].velocity.x -= self.objects[0].inv_mass * impulse.x;
+    // self.objects[0].velocity.y -= self.objects[0].inv_mass * impulse.y;
+    // self.objects[1].velocity.x += self.objects[1].inv_mass * impulse.x;
+    // self.objects[1].velocity.y += self.objects[1].inv_mass * impulse.y;
 }
+// struct Shape {}
+// struct Aabb {
+//     min: PointNA,
+//     max: Vec2,
+// }
+// impl Default for Aabb {
+//     fn default() -> Self {
+//         Aabb {
+//             min: na::point!(20.0, 60.0),
+//             max: Vec2::new(0.0, 1.0),
+//         }
+//     }
+// }
+// impl Aabb {
+//     fn get_pix_point(&self) -> PointPE {
+//         return pix_engine::point!(self.min.x, self.min.y);
+//     }
+// }
+struct Manifold {
+    a: Body,
+    b: Body,
+    penetration: f32,
+    normal: Vec2,
+}
+
+// trait ObjectE2d
+
+// fn circle_vs_circle(mut m : Manifold) -> bool{
+//     let a : &CircleE2d = &m.a;
+//     let b : &CircleE2d = &m.b;
+
+//     let n: VecE2d = VecE2d{x: b.position.x - a.position.x, y: b.position.y - a.position.x};
+//     let mut r : f32 = (a.radius + b.radius) as f32;
+//     r*= r;
+//     // no collision
+//     if n.length_squared() > r {
+//         dbg!("no collision");
+//         return false;
+//     }
+
+//     dbg!("collision");
+//     // collision
+//     let d: f32 = n.length();
+//     if(d != 0.){
+//         m.penetration = r - d;``
+//         m.normal.x /= d;
+//         m.normal.y /= d;
+//     }
+
+//     return true;
+
+// }
+// fn circle_vs_circle_opt(a: &Collider<CircleE2d>, b: &Body) -> bool {
+//     let mut r = a.radius + b.radius;
+//     r *= r;
+//     // dbg!(r, a.position.x, b.position.x, a.position.y, b.position.y);
+//     // return r > (a - b).powf(2.0);
+//     return r > (a.position.x - b.position.x).powf(2.0) + (a.position.y - b.position.y).powf(2.0);
+// }
+// fn aabb_vs_aabb(a: Aabb, b: Aabb) -> bool {
+//     if a.max.x < b.min.x || a.min.x < b.max.x {
+//         return false;
+//     }
+//     if a.max.y < b.min.y || a.min.y < b.max.y {
+//         return false;
+//     }
+//     return true;
+// }
 
 impl PixEngine for MyApp {
     // Set up application state and initial settings. `PixState` contains
@@ -176,6 +187,7 @@ impl PixEngine for MyApp {
         s.font_family(Font::NOTO)?;
         s.font_size(16)?;
 
+        // s.text_area("Test", 100, 100, &mut self.text_area)?;
         // Returning `Err` instead of `Ok` would indicate initialization failed,
         // and that the application should terminate immediately.
         Ok(())
@@ -192,7 +204,7 @@ impl PixEngine for MyApp {
             velocity: Vec2::new(0.0, 10.0),
             inv_mass: 1.0,
             restitution: 0.8,
-            collider: Collider::CircleE2d(CircleE2d { radius: 20.0 }),
+            collider: Collider::CircleE2d(CircleE2d { radius: 2.0 }),
         };
         self.objects.push(circle_body);
 
@@ -212,17 +224,15 @@ impl PixEngine for MyApp {
         let r = Rect::new(0, (max_height as i32) - 20, max_width as i32, max_height as i32);
         s.rect(r)?;
         for i in self.objects.iter() {
-            let v = i.to_draw();
             match &i.collider {
                 Collider::CircleE2d(c) => {
-                    s.circle([v[0], v[1], v[2]])?;
-                    // s.circle([i.position.x as i32, i.position.y as i32, c.radius as i32])?;
+                    s.circle([i.position.x as i32, i.position.y as i32, c.radius as i32])?;
                 }
-                Collider::RectE2d(r) => {
-                    s.rect([v[0], v[1], v[2], v[3]])?;
-                    // s.rect(rect!([0, 0], 100, 100))?;
-                }
+                Collider::RectE2d(rect_e2d) => todo!(),
             }
+            //         (CircleE2d(a),
+            // s.circle([i.position.x as i32, i.position.y as i32, i.radius as i32])?
+            // s.circle([i.position.x as i32, i.position.y as i32, i.radius as i32])?;
         }
         let mut items_to_remove: Vec<usize> = Vec::new();
         for (idx, c) in self.objects.iter_mut().enumerate() {
@@ -240,16 +250,31 @@ impl PixEngine for MyApp {
                 c.position.x += c.velocity.x;
                 // dbg!(c.position.y);
             }
+            // else if c.position.y + c.radius < max_height {
+            //     c.position.y += c.speed;
+            // } else if c.position.y + c.radius == max_height {
+            //     c.position.x += -c.speed * ((idx as f32)+1.);
+            // }
         }
 
         if self.objects.len() >= 2 {
             dbg!(self.objects.len());
             let i = self.objects.len() - 2;
             let j = self.objects.len() - 1;
+            // if circle_vs_circle_opt(&self.objects[i], &self.objects[j]) {
+            // s.text("Collision")?;
+            // self.resolve_collision();
 
             let (i, j) = if i < j { (i, j) } else { (j, i) };
             let (left, right) = self.objects.split_at_mut(j);
             rc(&mut left[i], &mut right[0]);
+            // rc(&mut self.objects[0], &mut self.objects[1]);
+            // }
+            // resolve_collision(&mut self.items[0], &mut self.items[1]);
+            //  if circle_vs_circle_opt(&self.items[0], &self.items[1]){
+            //             println!("Collision");
+            //             self.items[1].speed *= -1;
+            //        }
         }
 
         // remove items off screen
@@ -257,6 +282,8 @@ impl PixEngine for MyApp {
             self.objects.remove(*idx);
         }
 
+        // Draw a circle with fill color at the mouse position with a radius of
+        // 80.
         let m = s.mouse_pos();
         s.circle([m.x(), m.y(), 5])?;
 
@@ -288,32 +315,38 @@ fn main() -> PixResult<()> {
             collider: Collider::RectE2d(RectE2d {
                 min: Vec2::new(0.0, 0.0),
                 max: Vec2::new(0.0, 0.0),
-                length: 200.0,
-                width: 200.0,
             }),
         },
     };
-    let rect_body = Body {
-        position: Vec2::new(100.0, 100.0),
-        velocity: Vec2::new(0.0, 0.0),
-        inv_mass: 0.0,
-        restitution: 0.8,
-        collider: Collider::RectE2d(RectE2d {
-            min: Vec2::new(0.0, 0.0),
-            max: Vec2::new(0.0, 0.0),
-            length: 100.0,
-            width: 100.0,
-        }),
-    };
-    app.objects.push(rect_body);
+
     let circle_body = Body {
         position: Vec2::new(480.0, 500.0),
         velocity: Vec2::new(0.0, 0.0),
         inv_mass: 0.0,
         restitution: 0.8,
-        collider: Collider::CircleE2d(CircleE2d { radius: 200.0 }),
+        collider: Collider::CircleE2d(CircleE2d { radius: 2.0 }),
     };
     app.objects.push(circle_body);
+    // let platform = Body {
+    //     position: Vec2::new(480.0, 500.0),
+    //     velocity: Vec2::new(0.0, 0.0),
+    //     inv_mass: 0.0,
+    //     restitution: 0.8,
+    //     collider: Collider::RectE2d(RectE2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(0.0, 0.0) }),
+    // };
+    // app.platform = platform;
+    // CircleE2d::default()
 
+    //     app.items[1].position.x = 500.;
+    //     app.items[1].position.y = 500.;
+    // .
+    // app.objects[0].position.x = 480.0;
+    // app.objects[0].radius = 200.0;
+    // app.objects[0].inv_mass = 0.0;
+    // app.objects[0].position.y = 500.0;
+    // app.objects[0].velocity.y = 0.0;
+
+    // app.items[0].position.x -= 10.;
+    // app.items[1].velocity.y  =0.;
     engine.run(&mut app)
 }
