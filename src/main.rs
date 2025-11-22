@@ -20,9 +20,9 @@ pub struct CircleE2d {
     radius: f32,
 }
 pub struct RectE2d {
-    pub min: Vec2,
-    pub max: Vec2,
-    pub length: f32,
+    // pub min: Vec2,
+    // pub max: Vec2,
+    pub height: f32,
     pub width: f32,
 }
 pub enum Collider {
@@ -62,10 +62,10 @@ impl CircleE2d {
 }
 
 impl RectE2d {
-    pub fn new(min: Vec2, max: Vec2, length: f32, width: f32) -> Self {
+    pub fn new(width: f32, height: f32) -> Self {
         // RectE2d { half }
         // TODO - do pos + width /2 and pos + height /2
-        RectE2d { min, max, width, length }
+        RectE2d { width, height: height }
     }
 
     pub fn default() -> Self {
@@ -80,9 +80,10 @@ impl Body {
             }
             Collider::RectE2d(r) => {
                 vec![
-                    self.position.x as i32,
-                    self.position.y as i32,
-                    r.length as i32,
+                    (self.position.x - r.width / 2.0) as i32,
+                    (self.position.y - r.height / 2.0) as i32,
+
+                    r.height as i32,
                     r.width as i32
                 ]
             }
@@ -134,7 +135,7 @@ pub fn circle_vs_circle(m: &mut Manifold) -> bool {
     return true;
 }
 pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
-    dbg!("r v c check");
+    // dbg!("r v c check");
 
     let col_a = m.a;
     let col_b = m.b;
@@ -142,22 +143,25 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
     let circ_b = m.b.collider.as_circle();
 
     // vec from a to b
-    let n: Vec2 = col_a.position - col_b.position;
-
+    let n: Vec2 = col_b.position - col_a.position;
+    // dbg!(col_b.position, col_a.position);
     // closest point on a to center of b
     let mut closest: Vec2 = n;
 
     // calc half extents
-    let x_extent = (rect_a.max.x - rect_a.min.x) / 2.0;
-    let y_extent = (rect_a.max.y - rect_a.min.y) / 2.0;
+    let x_extent = rect_a.width / 2.0;
+    let y_extent = rect_a.height / 2.0;
 
     // clamp point to edges of the aabb
-    closest.x = clamp(-x_extent, x_extent, closest.x);
-    closest.y = clamp(-y_extent, y_extent, closest.y);
+    closest.x = clamp(closest.x, -x_extent, x_extent);
+    closest.y = clamp(closest.y, -y_extent, y_extent);
 
     let mut inside = false;
+    // dbg!(n, closest);
+
     // if circle inside, clamp center to closest edge
     if n == closest {
+        // dbg!("inside");
         inside = true;
         if n.x.abs() > n.y.abs() {
             // clamp to closest extent
@@ -166,13 +170,14 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
             } else {
                 closest.x = -x_extent;
             }
-        }
-        // y axis is shorter
-    } else {
-        if closest.y > 0.0 {
-            closest.y = y_extent;
         } else {
-            closest.y = -y_extent;
+            // y axis is shorter
+
+            if closest.y > 0.0 {
+                closest.y = y_extent;
+            } else {
+                closest.y = -y_extent;
+            }
         }
     }
     let normal = n - closest;
@@ -186,7 +191,6 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
         dbg!("early out");
         return false;
     }
-
     d = d.sqrt();
 
     // Collision normal needs to be flipped to point outside if circle was
@@ -194,13 +198,23 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
     dbg!(inside);
     if inside {
         m.penetration = r - d;
-        m.normal = -n;
+        m.normal = -normal;
     } else {
         m.penetration = r - d;
-        m.normal = n;
+        m.normal = normal;
     }
+    dbg!(normal, d, r, m.penetration, m.normal);
 
     return true;
+}
+pub fn circle_vs_aabb(m: &mut Manifold) -> bool {
+    dbg!("c v a");
+    let c = m.a;
+    m.a = m.b;
+    m.b = c;
+    let col = aabb_vs_circle(m);
+    m.normal *= -1.0;
+    return col;
 }
 fn rc(a: &mut Body, b: &mut Body) {
     let mut m = Manifold {
@@ -216,12 +230,7 @@ fn rc(a: &mut Body, b: &mut Body) {
             // r > (a.position.x - b.position.x).powf(2.0) + (a.position.y - b.position.y).powf(2.0)
             circle_vs_circle(&mut m)
         }
-        (Collider::CircleE2d(circle_e2d), Collider::RectE2d(rect_e2d)) => {
-            // flip the inputs
-            m.a = b;
-            m.b = a;
-            aabb_vs_circle(&mut m)
-        }
+        (Collider::CircleE2d(circle_e2d), Collider::RectE2d(rect_e2d)) => { circle_vs_aabb(&mut m) }
         (Collider::RectE2d(rect_e2d), Collider::CircleE2d(circle_e2d)) => { aabb_vs_circle(&mut m) }
         (Collider::RectE2d(i), Collider::RectE2d(j)) => todo!(),
     };
@@ -230,8 +239,9 @@ fn rc(a: &mut Body, b: &mut Body) {
         return;
     }
     let rv = b.velocity - a.velocity;
-    let mut n = b.position - a.position;
-    n /= glm::length(&n);
+    // let mut n = b.position - a.position;
+    // n /= glm::length(&n);
+    let n = m.normal;
 
     let vel_along_normal = rv.dot(&n);
     dbg!(rv.dot(&n));
@@ -247,8 +257,8 @@ fn rc(a: &mut Body, b: &mut Body) {
     j /= b.inv_mass + a.inv_mass;
     let impulse = j * n;
     dbg!(j, impulse.x, impulse.y, vel_along_normal);
-    a.velocity -= a.inv_mass * impulse;
-    b.velocity += b.inv_mass * impulse;
+    a.velocity += a.inv_mass * impulse;
+    b.velocity -= b.inv_mass * impulse;
 }
 
 impl PixEngine for MyApp {
@@ -366,7 +376,7 @@ fn main() -> PixResult<()> {
         .dimensions(1200, 800)
         .title("PhysicsTest")
         .show_frame_rate()
-        .target_frame_rate(60)
+        .target_frame_rate(10)
         .resizable()
         .build()?;
     let mut app = MyApp {
@@ -377,22 +387,18 @@ fn main() -> PixResult<()> {
             inv_mass: 0.0,
             restitution: 0.8,
             collider: Collider::RectE2d(RectE2d {
-                min: Vec2::new(0.0, 0.0),
-                max: Vec2::new(0.0, 0.0),
-                length: 200.0,
+                height: 200.0,
                 width: 200.0,
             }),
         },
     };
     let rect_body = Body {
-        position: Vec2::new(100.0, 100.0),
+        position: Vec2::new(480.0, 500.0),
         velocity: Vec2::new(0.0, 0.0),
         inv_mass: 0.0,
         restitution: 0.8,
         collider: Collider::RectE2d(RectE2d {
-            min: Vec2::new(0.0, 0.0),
-            max: Vec2::new(0.0, 0.0),
-            length: 100.0,
+            height: 100.0,
             width: 100.0,
         }),
     };
