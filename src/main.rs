@@ -111,15 +111,15 @@ pub struct Manifold<'a> {
 }
 pub fn circle_vs_circle(m: &mut Manifold) -> bool {
     dbg!("c v c check");
-    let ca = m.a;
-    let cb = m.b;
+    // let ca = m.a;
+    // let cb = m.b;
     let sa = m.a.collider.as_circle();
     let sb = m.b.collider.as_circle();
 
-    let n: Vec2 = ca.position - cb.position;
+    let n: Vec2 = m.b.position - m.a.position;
     let mut r = sa.radius + sb.radius;
-    r *= r;
-    if n.magnitude_squared() > r {
+    // r *= r;
+    if n.magnitude_squared() > r * r {
         return false;
     }
     let d = n.magnitude();
@@ -137,13 +137,13 @@ pub fn circle_vs_circle(m: &mut Manifold) -> bool {
 pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
     // dbg!("r v c check");
 
-    let col_a = m.a;
-    let col_b = m.b;
+    // let col_a = m.a;
+    // let col_b = m.b;
     let rect_a = m.a.collider.as_rect();
     let circ_b = m.b.collider.as_circle();
 
     // vec from a to b
-    let n: Vec2 = col_b.position - col_a.position;
+    let n: Vec2 = m.a.position - m.b.position;
     // dbg!(col_b.position, col_a.position);
     // closest point on a to center of b
     let mut closest: Vec2 = n;
@@ -155,13 +155,13 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
     // clamp point to edges of the aabb
     closest.x = clamp(closest.x, -x_extent, x_extent);
     closest.y = clamp(closest.y, -y_extent, y_extent);
-
+    // dbg!(x_extent, y_extent);
     let mut inside = false;
     // dbg!(n, closest);
 
     // if circle inside, clamp center to closest edge
     if n == closest {
-        // dbg!("inside");
+        dbg!("inside", n);
         inside = true;
         if n.x.abs() > n.y.abs() {
             // clamp to closest extent
@@ -188,22 +188,22 @@ pub fn aabb_vs_circle(m: &mut Manifold) -> bool {
     // Circle not inside the AABB
 
     if d > r * r && !inside {
-        dbg!("early out");
+        // dbg!("early out");
         return false;
     }
     d = d.sqrt();
 
     // Collision normal needs to be flipped to point outside if circle was
     // inside the AABB
-    dbg!(inside);
+    // dbg!(inside);
     if inside {
         m.penetration = r - d;
-        m.normal = -normal;
+        m.normal = normal.normalize();
     } else {
         m.penetration = r - d;
-        m.normal = normal;
+        m.normal = normal.normalize();
     }
-    dbg!(normal, d, r, m.penetration, m.normal);
+    dbg!(closest, n, normal, d, r, m.penetration, m.normal, inside);
 
     return true;
 }
@@ -218,8 +218,8 @@ pub fn circle_vs_aabb(m: &mut Manifold) -> bool {
 }
 fn rc(a: &mut Body, b: &mut Body) {
     let mut m = Manifold {
-        a: a,
-        b: b,
+        a,
+        b,
         penetration: 0.0,
         normal: Vec2::new(0.0, 0.0),
     };
@@ -235,16 +235,17 @@ fn rc(a: &mut Body, b: &mut Body) {
         (Collider::RectE2d(i), Collider::RectE2d(j)) => todo!(),
     };
     if !col {
-        dbg!("no col");
+        // dbg!("no col");
         return;
     }
+    let penetration = m.penetration;
     let rv = b.velocity - a.velocity;
     // let mut n = b.position - a.position;
     // n /= glm::length(&n);
     let n = m.normal;
 
     let vel_along_normal = rv.dot(&n);
-    dbg!(rv.dot(&n));
+    dbg!(rv, n, rv.dot(&n));
 
     if vel_along_normal > 0.0 {
         dbg!("no collision");
@@ -256,9 +257,17 @@ fn rc(a: &mut Body, b: &mut Body) {
     let mut j: f32 = -(1.0 + e) * vel_along_normal;
     j /= b.inv_mass + a.inv_mass;
     let impulse = j * n;
-    dbg!(j, impulse.x, impulse.y, vel_along_normal);
-    a.velocity += a.inv_mass * impulse;
-    b.velocity -= b.inv_mass * impulse;
+    dbg!(j, impulse.x, impulse.y, vel_along_normal, e);
+    a.velocity -= a.inv_mass * impulse;
+    b.velocity += b.inv_mass * impulse;
+
+    // position correction
+    let percent = 0.2;
+    let slop = 0.01;
+    let correction = ((penetration - slop).max(0.0) / (a.inv_mass + b.inv_mass)) * n * percent;
+    dbg!(penetration, correction);
+    a.position -= a.inv_mass * correction;
+    b.position += b.inv_mass * correction;
 }
 
 impl PixEngine for MyApp {
@@ -287,7 +296,7 @@ impl PixEngine for MyApp {
     ) -> PixResult<bool> {
         let circle_body = Body {
             position: Vec2::new(pos.x() as f32, pos.y() as f32),
-            velocity: Vec2::new(0.0, 10.0),
+            velocity: Vec2::new(0.0, 5.0),
             inv_mass: 1.0,
             restitution: 0.8,
             collider: Collider::CircleE2d(CircleE2d { radius: 20.0 }),
@@ -309,7 +318,7 @@ impl PixEngine for MyApp {
 
         // UPDATE PHYSICS
         if self.objects.len() >= 2 {
-            dbg!(self.objects.len());
+            // dbg!(self.objects.len());
             let i = self.objects.len() - 2;
             let j = self.objects.len() - 1;
 
@@ -349,10 +358,12 @@ impl PixEngine for MyApp {
             let v = i.to_draw();
             match &i.collider {
                 Collider::CircleE2d(c) => {
+                    s.fill(Color::ALICE_BLUE);
                     s.circle([v[0], v[1], v[2]])?;
                     // s.circle([i.position.x as i32, i.position.y as i32, c.radius as i32])?;
                 }
                 Collider::RectE2d(r) => {
+                    s.fill(color!(255));
                     s.rect([v[0], v[1], v[2], v[3]])?;
                     // s.rect(rect!([0, 0], 100, 100))?;
                 }
@@ -376,7 +387,7 @@ fn main() -> PixResult<()> {
         .dimensions(1200, 800)
         .title("PhysicsTest")
         .show_frame_rate()
-        .target_frame_rate(10)
+        .target_frame_rate(60)
         .resizable()
         .build()?;
     let mut app = MyApp {
@@ -402,7 +413,6 @@ fn main() -> PixResult<()> {
             width: 100.0,
         }),
     };
-    app.objects.push(rect_body);
     let circle_body = Body {
         position: Vec2::new(480.0, 500.0),
         velocity: Vec2::new(0.0, 0.0),
@@ -410,7 +420,9 @@ fn main() -> PixResult<()> {
         restitution: 0.8,
         collider: Collider::CircleE2d(CircleE2d { radius: 200.0 }),
     };
-    // app.objects.push(circle_body);
+    // app.objects.push(rect_body);
+
+    app.objects.push(circle_body);
 
     engine.run(&mut app)
 }
